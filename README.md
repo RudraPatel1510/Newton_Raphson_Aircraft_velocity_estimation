@@ -1,109 +1,60 @@
 # Aircraft Velocity Estimation using Newton–Raphson
 
-A Python implementation for estimating an aircraft's **total airspeed** from aerodynamic and flight-state measurements using the **Newton–Raphson numerical method**.
+Estimating aircraft airspeed without relying entirely on a dedicated airspeed sensor is an interesting problem in flight-state estimation.
 
-The project is intended as a reference implementation for future **real-time embedded deployment on ESP32**.
+This project explores an aerodynamic approach where the aircraft's **mass, acceleration, attitude, air density, wing characteristics, and vertical velocity** are used to estimate its total velocity.
 
----
-
-## Overview
-
-The velocity is estimated by solving a nonlinear aerodynamic lift equation:
-
-$$
-f(V)=
-m a_x \sin(\theta_p-\theta)
-+
-m a_z \cos(\theta_p-\theta)
--
-\frac{1}{2}\rho V^2 A
-\left[
-C_{L0}+C_{\alpha}(\theta_p-\theta)
-\right]
-$$
-
-where the flight-path angle is estimated as:
-
-$$
-\theta =
-\sin^{-1}
-\left(
-\frac{V_v\cos(\theta_r)}{V}
-\right)
-$$
-
-The required velocity is obtained by solving:
-
-$$
-f(V)=0
-$$
-
-using Newton–Raphson:
-
-$$
-V_{n+1}
-=
-V_n-
-\frac{f(V_n)}{f'(V_n)}
-$$
+The nonlinear aerodynamic equation is solved using the **Newton–Raphson method**.
 
 ---
 
-## Aerodynamic Model
+## How It Works
 
-The lift coefficient is modeled using the linear approximation:
+The aerodynamic model starts from the lift relationship:
 
-$$
-C_L=C_{L0}+C_{\alpha}\alpha
-$$
+**L = ½ρV²ACₗ**
+
+where the lift coefficient is approximated as:
+
+**Cₗ = Cₗ₀ + Cₐₗₚₕₐ α**
+
+The angle of attack is estimated from the aircraft attitude and vertical velocity:
+
+**α = θₚ − θ**
 
 where:
 
-$$
-\alpha=\theta_p-\theta
-$$
+**θ = sin⁻¹(Vᵥ cos(θᵣ) / V)**
 
-The derivative of the flight-path angle is:
+Combining these relationships with the measured aircraft accelerations gives the nonlinear function:
 
-$$
-\frac{d\theta}{dV}
-=
--\frac{V_v\cos(\theta_r)}
-{V^2
-\sqrt{
-1-
-\left(
-\frac{V_v\cos(\theta_r)}{V}
-\right)^2
-}}
-$$
+**f(V) = m·aₓ·sin(θₚ − θ) + m·a_z·cos(θₚ − θ) − ½ρV²A[Cₗ₀ + Cₐₗₚₕₐ(θₚ − θ)]**
 
-The analytical derivative $f'(V)$ is implemented directly in the code, avoiding numerical differentiation.
+The required velocity is the value of **V** for which:
+
+**f(V) = 0**
 
 ---
 
-## Input Parameters
+## Solving for Velocity
 
-The algorithm uses:
+Because the equation contains velocity inside both the aerodynamic term and the inverse-sine calculation, it cannot be conveniently rearranged into a simple closed-form expression.
 
-| Parameter | Description | Unit |
-|---|---|---|
-| `mass` | Aircraft mass | kg |
-| `ax` | Forward acceleration | m/s² |
-| `az` | Vertical acceleration | m/s² |
-| `Current Pitch (deg)` | Pitch angle | ° |
-| `Current Roll (deg)` | Roll angle | ° |
-| `rho` | Air density | kg/m³ |
-| `A` | Reference/wing area | m² |
-| `cl0` | Zero-angle lift coefficient | - |
-| `C_alpha` | Lift-curve slope | rad⁻¹ |
-| `vertical_speed` | Vertical velocity | m/s |
+Newton–Raphson is therefore used:
+
+**Vₙ₊₁ = Vₙ − f(Vₙ) / f′(Vₙ)**
+
+The derivative **f′(V)** is calculated analytically and implemented directly in the code.
+
+This avoids numerical differentiation and keeps each iteration computationally lightweight.
 
 ---
 
-## Newton–Raphson Implementation
+## Sequential Estimation
 
-The solver calculates both the function and its analytical derivative:
+For flight data, velocity is estimated continuously rather than as isolated measurements.
+
+The previous estimated velocity is therefore used as the initial guess for the next sample:
 
 ```python
-fv, fdv = fvfdv(...)
+prev_velocity = velocity
